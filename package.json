@@ -1,0 +1,47 @@
+{
+  "name": "vite-plugin-cloudflare-router",
+  "description": "File-based router for Cloudflare Workers",
+  "version": "0.1.0",
+  "author": "Yusuke <https://github.com/yusuke99>",
+  "license": "MIT",
+  "scripts": {
+    "build": "vp pack",
+    "lint": "vp check --fix",
+    "test": "vp test run",
+    "test:watch": "vp test watch"
+  },
+  "peerDependencies": {
+    "vite": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "keywords": [
+    "cloudflare",
+    "cloudflare-workers",
+    "file-based-router",
+    "router",
+    "vite-plugin"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yusuke99/vite-plugin-cloudflare-router"
+  }
+}
