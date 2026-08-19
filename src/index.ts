@@ -135,23 +135,10 @@ export function scanRoutes(routesDir: string): Routes[] {
       pattern,
     };
   });
-  const routes = sortRoutes(rawRoutes);
 
-  const routePattern = new Map<string, string>();
+  assertNoDuplicateRoutePattern(rawRoutes);
 
-  for (const route of routes) {
-    const existing = routePattern.get(route.pattern);
-    if (existing) {
-      throw new Error(
-        `Duplicate route pattern "${route.pattern}":\n` +
-          `  - "${toDisplayPath(path.relative(routesDir, existing))}"\n` +
-          `  - "${toDisplayPath(path.relative(routesDir, route.filePath))}"`,
-      );
-    }
-    routePattern.set(route.pattern, route.filePath);
-  }
-
-  return routes;
+  return sortRoutes(rawRoutes);
 }
 
 /**
@@ -322,6 +309,19 @@ function filePathToPattern(relativeFilePath: string) {
   });
 
   return `/${segments.join('/')}`;
+}
+
+function assertNoDuplicateRoutePattern(routes: Routes[]) {
+  const seen = new Map<string, string>();
+  for (const { pattern, filePath } of routes) {
+    const existing = seen.get(pattern);
+    if (existing) {
+      throw new Error(
+        `Duplicate route pattern "${pattern}":\n` + `  - "${existing}"\n` + `  - "${filePath}"`,
+      );
+    }
+    seen.set(pattern, filePath);
+  }
 }
 
 function toDisplayPath(relativeFilePath: string) {

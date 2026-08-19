@@ -152,7 +152,7 @@ describe('scanRoutes', () => {
     ]);
 
     expect(() => scanRoutes(routesDir)).toThrow(
-      'Duplicate route pattern "/api":\n  - "/api/index.ts"\n  - "/api.ts"',
+      'Duplicate route pattern "/api":\n  - "/routes/api/index.ts"\n  - "/routes/api.ts"',
     );
   });
 
