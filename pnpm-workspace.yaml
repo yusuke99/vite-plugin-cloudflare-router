@@ -1,4 +1,7 @@
 catalog:
+  '@rolldown/pluginutils': ^1.0.1
+  '@types/node': ^24.0.0
+  memfs: ^4.68.1
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@0.2.6
   vite-plus: 0.2.6
