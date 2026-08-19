@@ -1,5 +1,6 @@
 import type { Routes } from './index.js';
 import type { Segment } from './runtime.js';
+import { normalizePath } from 'vite';
 import { patternToSegments } from './index.js';
 
 /**
@@ -19,7 +20,7 @@ import { patternToSegments } from './index.js';
  */
 export function generateVirtualModule(routes: Routes[]) {
   const imports = routes.map(
-    (route, i) => `import * as module$${i} from ${JSON.stringify(toPosix(route.filePath))};`,
+    (route, i) => `import * as module$${i} from ${JSON.stringify(normalizePath(route.filePath))};`,
   );
   const definitions = routes.map((route, i) =>
     [
@@ -47,8 +48,4 @@ function segmentToLiteral(segment: Segment): string {
     return `{ kind: "static", value: ${JSON.stringify(segment.value)} }`;
   }
   return `{ kind: "${segment.kind}", name: ${JSON.stringify(segment.name)} }`;
-}
-
-function toPosix(path: string) {
-  return path.split('\\').join('/');
 }

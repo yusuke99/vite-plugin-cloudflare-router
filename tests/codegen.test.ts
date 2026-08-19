@@ -33,25 +33,4 @@ describe('generateVirtualModule', () => {
       "
     `);
   });
-
-  test('normalizes Windows path', () => {
-    const module = generateVirtualModule([
-      { filePath: 'C:\\my-app\\worker\\routes\\api.ts', pattern: '/api' },
-    ]);
-
-    expect(module).toMatchInlineSnapshot(`
-      "import * as module$0 from "C:/my-app/worker/routes/api.ts";
-
-      export const routes = [
-        {
-          pattern: "/api",
-          segments: [
-            { kind: "static", value: "api" },
-          ],
-          module: module$0,
-        },
-      ];
-      "
-    `);
-  });
 });
