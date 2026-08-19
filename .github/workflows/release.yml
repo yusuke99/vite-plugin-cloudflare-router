@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  publish:
+    if: github.repository == 'yusuke99/vite-plugin-cloudflare-router'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Vite+
+        uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+        with:
+          run-install: false
+          cache: true
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install Dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Build
+        run: vp pack
+
+      - name: Publish
+        run: vp pm publish --access public --no-git-checks
+
+  release:
+    needs: publish
+    if: github.repository == 'yusuke99/vite-plugin-cloudflare-router'
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          next_version=$(jq -r '.version' package.json | sed 's/^/v/')
+
+          gh release create "$next_version" \
+          --title "$next_version" \
+          --generate-notes
