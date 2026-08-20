@@ -3,11 +3,12 @@ import type { Plugin } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { exactRegex } from '@rolldown/pluginutils';
-import { generateVirtualModule } from './codegen.js';
+import { TYPES_ROOT_DIR, generateVirtualModule, writeGeneratedTypes } from './codegen.js';
 
 const PLUGIN_NAME = 'vite-plugin-cloudflare-router';
 const VIRTUAL_MODULE_ID = 'virtual:cloudflare-router';
 const RESOLVED_VIRTUAL_MODULE_ID = '\0' + VIRTUAL_MODULE_ID;
+const HANDLER_TYPES_IMPORT_RE = /^\.\/\+types(?:\/|$)/;
 
 interface PluginConfig {
   /**
@@ -31,21 +32,42 @@ interface PluginConfig {
 }
 
 export default function cloudflareRouter(pluginConfig: PluginConfig = {}): Plugin {
+  let rootDir = '';
   let routesDir = '';
+
+  function syncGeneratedTypes() {
+    const routes = scanRoutes(routesDir);
+    writeGeneratedTypes(rootDir, routes);
+  }
 
   return {
     name: PLUGIN_NAME,
 
+    config() {
+      return {
+        server: {
+          watch: {
+            ignored: [`**/${TYPES_ROOT_DIR}/**`],
+          },
+        },
+      };
+    },
+
     configResolved(config) {
-      routesDir = path.resolve(config.root, pluginConfig.routesDir ?? './worker/routes');
+      rootDir = config.root;
+      routesDir = path.resolve(rootDir, pluginConfig.routesDir ?? './worker/routes');
+      syncGeneratedTypes();
     },
 
     resolveId: {
       filter: {
-        id: exactRegex(VIRTUAL_MODULE_ID),
+        id: [exactRegex(VIRTUAL_MODULE_ID), HANDLER_TYPES_IMPORT_RE],
       },
-      handler() {
-        return RESOLVED_VIRTUAL_MODULE_ID;
+      handler(id, importer) {
+        if (id === VIRTUAL_MODULE_ID) {
+          return RESOLVED_VIRTUAL_MODULE_ID;
+        }
+        return resolveHandlerTypesImport(rootDir, id, importer);
       },
     },
 
@@ -60,15 +82,13 @@ export default function cloudflareRouter(pluginConfig: PluginConfig = {}): Plugi
       },
     },
 
-    hotUpdate({ type, file }) {
-      if (type === 'update') {
+    hotUpdate({ type, file, modules }) {
+      if (type === 'update' || !isFileInsideOf(file, routesDir)) {
         return;
       }
-      if (!isFileInsideOf(file, routesDir)) {
-        return;
-      }
-      const module = this.environment.moduleGraph.getModuleById(RESOLVED_VIRTUAL_MODULE_ID);
-      return module ? [module] : [];
+      syncGeneratedTypes();
+      const virtualModule = this.environment.moduleGraph.getModuleById(RESOLVED_VIRTUAL_MODULE_ID);
+      return virtualModule ? [...modules, virtualModule] : undefined;
     },
   };
 }
@@ -218,6 +238,51 @@ export function patternToSegments(pattern: string): Segment[] {
 function isFileInsideOf(file: string, dir: string) {
   const relative = path.relative(dir, file);
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+}
+
+/**
+ * Maps handler types import (e.g. `./+types`, `./+types/[params]`, `./+types/[...catchall]`) to
+ * `.cloudflare-router/types/<mirrored source>/+types/...`.
+ *
+ * @param {string} rootDir - The root directory of the project.
+ * @param {string} id - The import specifier of handler types.
+ * @param {string | undefined} importer - Absolute path of the file that imported `id`.
+ * @returns {string | undefined} The path to the handler types file or undefined if importer is undefined.
+ *
+ * @example
+ * ```ts
+ * const rootDir = '/my-project';
+ * const id = './+types/[id]';
+ * const importer = '/my-project/worker/routes/api/example/[id].ts';
+ *
+ * resolveHandlerTypesImport(rootDir, id, importer);
+ * // '/my-project/.cloudflare-router/types/worker/routes/api/example/+types/[id].ts'
+ * ```
+ *
+ */
+export function resolveHandlerTypesImport(
+  rootDir: string,
+  id: string,
+  importer: string | undefined,
+) {
+  if (!importer) {
+    return;
+  }
+  const specifier = id.split('?')[0] ?? id;
+  if (!HANDLER_TYPES_IMPORT_RE.test(specifier)) {
+    return;
+  }
+  const normalizedSpecifier = specifier === './+types' ? './+types/index' : specifier;
+  const absolutePath = path.resolve(path.dirname(importer), normalizedSpecifier);
+  const relativePath = path.relative(rootDir, absolutePath);
+  const typeFile =
+    relativePath.endsWith('.ts') || relativePath.endsWith('.js')
+      ? relativePath
+      : `${relativePath}.ts`;
+  const typesPath = path.join(rootDir, TYPES_ROOT_DIR, 'types', typeFile);
+  if (fs.existsSync(typesPath)) {
+    return typesPath;
+  }
 }
 
 function compareSegmentSpecificity(a: Segment[], b: Segment[]) {

@@ -1,6 +1,7 @@
 .DS_Store
 .env*
 .wrangler
+.cloudflare-router
 
 dist
 node_modules

@@ -9,7 +9,7 @@ export default defineConfig({
     dts: true,
   },
   fmt: {
-    ignorePatterns: ['*.md', '**/node_modules', '**/dist'],
+    ignorePatterns: ['*.md', '**/dist', '**/node_modules', '**/.cloudflare-router'],
     singleQuote: true,
     sortPackageJson: false,
     sortImports: {
@@ -24,7 +24,7 @@ export default defineConfig({
     },
   },
   lint: {
-    ignorePatterns: ['**/node_modules', '**/dist'],
+    ignorePatterns: ['**/dist', '**/node_modules', '**/.cloudflare-router'],
     plugins: ['oxc', 'typescript'],
     rules: {
       curly: ['error', 'all'],

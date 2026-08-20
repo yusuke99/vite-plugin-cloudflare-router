@@ -1,6 +1,12 @@
 const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'QUERY'] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
 
+declare global {
+  namespace Cloudflare {
+    interface Env {}
+  }
+}
+
 interface Bindings {
   ASSETS: {
     fetch: (request: Request) => Promise<Response>;
@@ -14,20 +20,20 @@ export interface ExecutionContext {
 
 type Params = Record<string, string | string[]>;
 
-interface RouteContext<Env = unknown, P extends Params = Params, Input = unknown> {
-  request: TypedRequest<Input>;
-  env: Env;
+export interface RouteContext<E = Cloudflare.Env, P = Params> {
+  request: Request;
+  env: E;
   ctx: ExecutionContext;
   params: P;
 }
 
-type RouteHandler<Env = unknown, P extends Params = Params> = (
-  context: RouteContext<Env, P>,
+export type RouteHandler<E = Cloudflare.Env, P = Params> = (
+  context: RouteContext<E, P>,
 ) => Response | Promise<Response>;
 
-type FallbackHandler<Env = unknown> = (
+type FallbackHandler<E = Cloudflare.Env> = (
   request: Request,
-  env: Env,
+  env: E,
   ctx: ExecutionContext,
 ) => Response | Promise<Response>;
 
@@ -53,7 +59,7 @@ interface RouteMatch {
   params: Params;
 }
 
-interface RouterConfig<Env = unknown> {
+interface RouterConfig<E = Cloudflare.Env> {
   /**
    * Called when no route matches. Defaults to `env.ASSETS.fetch(request)` when
    * an ASSETS binding exists, otherwise a 404 Not Found response.
@@ -67,28 +73,28 @@ interface RouterConfig<Env = unknown> {
    * });
    * ```
    */
-  fallback?: FallbackHandler<Env>;
+  fallback?: FallbackHandler<E>;
 }
 
-interface Router<Env = unknown> {
+interface Router<E = Cloudflare.Env> {
   /**
    * Handles a route request.
    *
    * @param {Request} request - The incoming request.
-   * @param {Env} env - Cloudflare's environment bindings.
+   * @param {E} env - Cloudflare's environment bindings.
    * @param {ExecutionContext} ctx - Cloudflare's execution context.
    * @returns {Promise<Response>} The response to the incoming request.
    *
    * @example
    * ```ts
-   * const router = createRouter<Env>(routes);
+   * const router = createRouter(routes);
    *
    * export default {
    *   fetch: (request, env, ctx) => router.handle(request, env, ctx),
    * } satisfies ExportedHandler<Env>;
    * ```
    */
-  handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response>;
+  handle(request: Request, env: E, ctx: ExecutionContext): Promise<Response>;
 }
 
 /**
@@ -97,22 +103,22 @@ interface Router<Env = unknown> {
  * this function only wires them up to handle requests.
  *
  * @param {RouteDefinition[]} routes - A list of route definitions to create a router from.
- * @param {RouterConfig<Env>} config - A configuration object for the router.
- * @returns {Router<Env>} A router that handles requests.
+ * @param {RouterConfig<E>} config - A configuration object for the router.
+ * @returns {Router<E>} A router that handles requests.
  *
  * @example
  * ```ts
  * import { routes } from 'virtual:cloudflare-router';
  * import { createRouter } from 'vite-plugin-cloudflare-router/runtime';
  *
- * const router = createRouter<Env>(routes);
+ * const router = createRouter(routes);
  * ```
  */
-export function createRouter<Env = unknown>(
+export function createRouter<E = Cloudflare.Env>(
   routes: RouteDefinition[],
-  config: RouterConfig<Env> = {},
-): Router<Env> {
-  async function handle(request: Request, env: Env, ctx: ExecutionContext) {
+  config: RouterConfig<E> = {},
+): Router<E> {
+  async function handle(request: Request, env: E, ctx: ExecutionContext) {
     const url = new URL(request.url);
     const matched = match(routes, url.pathname);
 
@@ -139,10 +145,44 @@ export function createRouter<Env = unknown>(
       });
     }
 
-    return (handler as RouteHandler<Env>)({ request, env, ctx, params });
+    return (handler as RouteHandler<E>)({ request, env, ctx, params });
   }
 
   return { handle };
+}
+
+/**
+ * Identity helper that types a route handler.
+ *
+ * @param {H} handler - The route handler to be typed.
+ * @returns {H} The typed route handler.
+ *
+ * @example
+ * ```ts
+ * import { json, defineHandler } from './+types/[name]';
+ *
+ * export const GET = defineHandler(({ params, env }) => {
+ *   return json({ message: `Hello ${params.name}!` });
+ * });
+ * ```
+ */
+export function defineHandler<H extends (context: RouteContext) => unknown>(handler: H): H {
+  return handler;
+}
+
+/**
+ * Call signature of `defineHandler` for each route.
+ * Generated `./+types/[params]` casts `defineHandler` so `params` are inferred.
+ *
+ * @template P - Params from the route's pattern (e.g. `/api/example/[id]` -> `{ id: string }`).
+ *
+ * @example
+ * ```ts
+ * export const defineHandler = $defineHandler as DefineHandler<{ id: string }>;
+ * ```
+ */
+export interface DefineHandler<P = Params> {
+  <H extends (context: RouteContext<Cloudflare.Env, P>) => unknown>(handler: H): H;
 }
 
 function match(routes: RouteDefinition[], pathname: string): RouteMatch | undefined {
@@ -193,7 +233,7 @@ function matchRoute(route: RouteDefinition, pathSegments: string[]): RouteMatch 
   return { module, params };
 }
 
-const defaultFallback: FallbackHandler = (request, env) => {
+const defaultFallback: FallbackHandler<unknown> = (request, env) => {
   if (hasAssetsBinding(env)) {
     return env.ASSETS.fetch(request);
   }
@@ -214,10 +254,6 @@ function decodeSegment(segment: string) {
   } catch {
     return segment;
   }
-}
-
-interface TypedRequest<Input = unknown> extends Request {
-  json(): Promise<Input>;
 }
 
 interface TypedResponse<T = unknown> extends Response {

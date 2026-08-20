@@ -1,7 +1,12 @@
 import path from 'node:path';
 import { vol } from 'memfs';
 import { beforeEach, describe, expect, test, vi } from 'vite-plus/test';
-import { patternToSegments, scanRoutes, sortRoutes } from '../src/index.js';
+import {
+  patternToSegments,
+  resolveHandlerTypesImport,
+  scanRoutes,
+  sortRoutes,
+} from '../src/index.js';
 
 vi.mock('node:fs', async () => {
   const { fs } = await import('memfs');
@@ -217,5 +222,81 @@ describe('patternToSegments', () => {
     expect(() => patternToSegments('/[...catchall]/invalid')).toThrow(
       'Catch-all segment "[...catchall]" must be the last segment in "/[...catchall]/invalid"',
     );
+  });
+});
+
+describe('resolveHandlerTypesImport', () => {
+  const rootDir = '/my-app';
+
+  beforeEach(() => {
+    vol.reset();
+  });
+
+  test('maps ./+types/[params]', () => {
+    const typesPath = path.join(
+      rootDir,
+      '.cloudflare-router',
+      'types',
+      'src',
+      'routes',
+      'api',
+      'test',
+      '+types',
+      '[params].ts',
+    );
+    vol.fromJSON({
+      [typesPath]: '',
+    });
+
+    const id = './+types/[params]';
+    const importer = path.join(rootDir, './src/routes/api/test/[params].ts');
+    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
+
+    expect(resolvedPath).toBe(typesPath);
+  });
+
+  test('maps ./+types/[...catchall]', () => {
+    const typesPath = path.join(
+      rootDir,
+      '.cloudflare-router',
+      'types',
+      'src',
+      'routes',
+      'api',
+      'test',
+      '+types',
+      '[...catchall].ts',
+    );
+    vol.fromJSON({
+      [typesPath]: '',
+    });
+
+    const id = './+types/[...catchall]';
+    const importer = path.join(rootDir, './src/routes/api/test/[...catchall].ts');
+    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
+
+    expect(resolvedPath).toBe(typesPath);
+  });
+
+  test('maps ./+types to +types/index.ts', () => {
+    const typesPath = path.join(
+      rootDir,
+      '.cloudflare-router',
+      'types',
+      'src',
+      'routes',
+      'api',
+      '+types',
+      'index.ts',
+    );
+    vol.fromJSON({
+      [typesPath]: '',
+    });
+
+    const id = './+types';
+    const importer = path.join(rootDir, './src/routes/api/index.ts');
+    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
+
+    expect(resolvedPath).toBe(typesPath);
   });
 });

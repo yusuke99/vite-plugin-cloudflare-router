@@ -53,7 +53,7 @@ const routes: RouteDefinition[] = [
 ];
 
 async function request(method: HttpMethod, path: string, env: unknown = {}) {
-  const router = createRouter(routes);
+  const router = createRouter<unknown>(routes);
   return router.handle(new Request(`https://example.com${path}`, { method }), env, ctx);
 }
 

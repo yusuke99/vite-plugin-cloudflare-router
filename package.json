@@ -14,18 +14,17 @@
     "vite": "^8.0.0"
   },
   "devDependencies": {
-    "@rolldown/pluginutils": "catalog:",
-    "@types/node": "catalog:",
-    "memfs": "catalog:",
-    "typescript": "catalog:",
-    "vite": "catalog:",
-    "vite-plus": "catalog:"
+    "@rolldown/pluginutils": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "memfs": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vite": "catalog:dev",
+    "vite-plus": "catalog:dev"
   },
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist",
-    "virtual.d.ts"
+    "dist"
   ],
   "exports": {
     ".": {
@@ -35,9 +34,6 @@
     "./runtime": {
       "types": "./dist/runtime.d.mts",
       "import": "./dist/runtime.mjs"
-    },
-    "./virtual": {
-      "types": "./virtual.d.ts"
     }
   },
   "keywords": [
