@@ -52,8 +52,8 @@ const routes: RouteDefinition[] = [
   },
 ];
 
-async function request(method: HttpMethod, path: string, env: unknown = {}) {
-  const router = createRouter<unknown>(routes);
+async function request(method: HttpMethod, path: string, env: Cloudflare.Env = {}) {
+  const router = createRouter(routes);
   return router.handle(new Request(`https://example.com${path}`, { method }), env, ctx);
 }
 
@@ -92,6 +92,18 @@ describe('createRouter', () => {
 
     expect(res.status).toBe(405);
     expect(res.headers.get('Allow')).toBe('GET, PATCH, PUT, DELETE, HEAD');
+  });
+
+  test('serves HEAD method with GET', async () => {
+    const router = createRouter(routes);
+    const res = await router.handle(
+      new Request('https://example.com/api/test', { method: 'HEAD' }),
+      {},
+      ctx,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
   });
 
   test('ignores trailing slashes', async () => {

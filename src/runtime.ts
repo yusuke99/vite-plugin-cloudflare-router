@@ -1,4 +1,4 @@
-const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'HEAD', 'OPTIONS', 'QUERY'] as const;
+const HTTP_METHODS = ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS', 'QUERY'] as const;
 export type HttpMethod = (typeof HTTP_METHODS)[number];
 
 declare global {
@@ -38,9 +38,9 @@ type FallbackHandler<E = Cloudflare.Env> = (
 ) => Response | Promise<Response>;
 
 type RouteModule = {
-  [M in HttpMethod]?: RouteHandler<never>;
+  [M in HttpMethod]?: RouteHandler<Cloudflare.Env>;
 } & {
-  ALL?: RouteHandler<never>;
+  ALL?: RouteHandler<Cloudflare.Env>;
 };
 
 export type Segment =
@@ -54,7 +54,7 @@ export interface RouteDefinition {
   module: RouteModule;
 }
 
-interface RouteMatch {
+interface Route {
   module: RouteModule;
   params: Params;
 }
@@ -114,38 +114,36 @@ interface Router<E = Cloudflare.Env> {
  * const router = createRouter(routes);
  * ```
  */
-export function createRouter<E = Cloudflare.Env>(
+export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
   routes: RouteDefinition[],
   config: RouterConfig<E> = {},
 ): Router<E> {
   async function handle(request: Request, env: E, ctx: ExecutionContext) {
     const url = new URL(request.url);
-    const matched = match(routes, url.pathname);
+    const route = match(routes, url.pathname);
 
-    if (!matched) {
+    if (!route) {
       const fallback = config.fallback ?? defaultFallback;
       return fallback(request, env, ctx);
     }
 
-    const { module, params } = matched;
-    const method = request.method.toUpperCase() as HttpMethod;
-    const handler = module[method] ?? (method === 'HEAD' ? module.GET : undefined) ?? module.ALL;
+    return dispatch(request.method, route, request, env, ctx);
+  }
 
-    if (!handler) {
-      const allow = new Set(HTTP_METHODS.filter((m) => module[m]));
-      if (allow.has('GET')) {
-        allow.add('HEAD');
-      }
-      if (module.ALL) {
-        HTTP_METHODS.forEach((m) => allow.add(m));
-      }
-      return new Response('Method Not Allowed', {
-        status: 405,
-        headers: { Allow: [...allow].join(', ') },
-      });
+  async function dispatch(
+    method: string,
+    route: Route,
+    request: Request,
+    env: E,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
+    if (method === 'HEAD') {
+      const response = await dispatch('GET', route, request, env, ctx);
+      return new Response(null, response);
     }
-
-    return (handler as RouteHandler<E>)({ request, env, ctx, params });
+    const { module, params } = route;
+    const handler = resolveHandler(method, module);
+    return handler({ request, env, ctx, params });
   }
 
   return { handle };
@@ -166,7 +164,9 @@ export function createRouter<E = Cloudflare.Env>(
  * });
  * ```
  */
-export function defineHandler<H extends (context: RouteContext) => unknown>(handler: H): H {
+export function defineHandler<H extends (context: RouteContext) => Response | Promise<Response>>(
+  handler: H,
+): H {
   return handler;
 }
 
@@ -182,10 +182,12 @@ export function defineHandler<H extends (context: RouteContext) => unknown>(hand
  * ```
  */
 export interface DefineHandler<P = Params> {
-  <H extends (context: RouteContext<Cloudflare.Env, P>) => unknown>(handler: H): H;
+  <H extends (context: RouteContext<Cloudflare.Env, P>) => Response | Promise<Response>>(
+    handler: H,
+  ): H;
 }
 
-function match(routes: RouteDefinition[], pathname: string): RouteMatch | undefined {
+function match(routes: RouteDefinition[], pathname: string): Route | undefined {
   const pathSegments = pathname.split('/').filter(Boolean);
 
   for (const route of routes) {
@@ -196,7 +198,7 @@ function match(routes: RouteDefinition[], pathname: string): RouteMatch | undefi
   }
 }
 
-function matchRoute(route: RouteDefinition, pathSegments: string[]): RouteMatch | undefined {
+function matchRoute(route: RouteDefinition, pathSegments: string[]): Route | undefined {
   const { segments, module } = route;
   const last = segments[segments.length - 1];
   const hasCatchall = last && last.kind === 'catchall';
@@ -239,6 +241,27 @@ const defaultFallback: FallbackHandler<unknown> = (request, env) => {
   }
   return new Response('Not Found', { status: 404 });
 };
+
+function resolveHandler(httpMethod: string, module: RouteModule) {
+  const handler = isHttpMethod(httpMethod) ? module[httpMethod] : undefined;
+  return handler ?? module.ALL ?? methodNotAllowedHandler(module);
+}
+
+function methodNotAllowedHandler(module: RouteModule) {
+  const allowedMethods: Uppercase<string>[] = HTTP_METHODS.filter((m) => module[m]);
+  if (module.GET) {
+    allowedMethods.push('HEAD');
+  }
+  return () =>
+    new Response('Method Not Allowed', {
+      status: 405,
+      headers: { Allow: allowedMethods.join(', ') },
+    });
+}
+
+function isHttpMethod(httpMethod: string): httpMethod is HttpMethod {
+  return HTTP_METHODS.some((m) => m === httpMethod);
+}
 
 function hasAssetsBinding(env: unknown): env is Bindings {
   return isObject(env) && isObject(env.ASSETS) && typeof env.ASSETS.fetch === 'function';
