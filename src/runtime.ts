@@ -88,13 +88,10 @@ interface Router<E = Cloudflare.Env> {
    * @example
    * ```ts
    * const router = createRouter(routes);
-   *
-   * export default {
-   *   fetch: (request, env, ctx) => router.handle(request, env, ctx),
-   * } satisfies ExportedHandler<Env>;
+   * export default router;
    * ```
    */
-  handle(request: Request, env: E, ctx: ExecutionContext): Promise<Response>;
+  fetch(request: Request, env: E, ctx: ExecutionContext): Promise<Response>;
 }
 
 /**
@@ -118,7 +115,7 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
   routes: RouteDefinition[],
   config: RouterConfig<E> = {},
 ): Router<E> {
-  async function handle(request: Request, env: E, ctx: ExecutionContext) {
+  async function fetch(request: Request, env: E, ctx: ExecutionContext) {
     const url = new URL(request.url);
     const route = match(routes, url.pathname);
 
@@ -146,7 +143,7 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
     return handler({ request, env, ctx, params });
   }
 
-  return { handle };
+  return { fetch };
 }
 
 declare const EXT: unique symbol;

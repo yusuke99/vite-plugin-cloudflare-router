@@ -54,7 +54,7 @@ const routes: RouteDefinition[] = [
 
 async function request(method: HttpMethod, path: string, env: Cloudflare.Env = {}) {
   const router = createRouter(routes);
-  return router.handle(new Request(`https://example.com${path}`, { method }), env, ctx);
+  return router.fetch(new Request(`https://example.com${path}`, { method }), env, ctx);
 }
 
 describe('createRouter', () => {
@@ -96,7 +96,7 @@ describe('createRouter', () => {
 
   test('serves HEAD method with GET', async () => {
     const router = createRouter(routes);
-    const res = await router.handle(
+    const res = await router.fetch(
       new Request('https://example.com/api/test', { method: 'HEAD' }),
       {},
       ctx,
@@ -139,7 +139,7 @@ describe('createRouter', () => {
   test('supports a custom fallback', async () => {
     const response = new Response('teapot', { status: 418 });
     const router = createRouter(routes, { fallback: () => response });
-    const res = await router.handle(new Request('https://example.com/missing'), {}, ctx);
+    const res = await router.fetch(new Request('https://example.com/missing'), {}, ctx);
 
     expect(res).toBe(response);
   });
