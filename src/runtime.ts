@@ -156,7 +156,7 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
  *
  * @example
  * ```ts
- * import { json, defineHandler } from './+types/[name]';
+ * import { json, defineHandler } from './+types';
  *
  * export const GET = defineHandler().handle(({ params }) => {
  *   return json({ message: `Hello ${params.name}!` });
@@ -176,7 +176,7 @@ export interface HandlerBuilder<P = Params> {
  *
  * @example
  * ```ts
- * import { json, defineHandler } from './+types/[name]';
+ * import { json, defineHandler } from './+types';
  *
  * export const GET = defineHandler().handle(({ params }) => {
  *   return json({ message: `Hello ${params.name}!` });
@@ -191,7 +191,7 @@ export function defineHandler(): HandlerBuilder {
 
 /**
  * Call signature of `defineHandler` for each route.
- * Generated `./+types/[params]` casts `defineHandler` so `params` are inferred.
+ * Generated `./+types` casts `defineHandler` so `params` are inferred.
  *
  * @template P - Params from the route's pattern (e.g. `/api/example/[id]` -> `{ id: string }`).
  *

@@ -14,7 +14,7 @@ interface PluginConfig {
   /**
    * Directory containing route files.
    *
-   * @default './worker/routes'
+   * @default './src/routes'
    *
    * @example
    * ```
@@ -23,7 +23,7 @@ interface PluginConfig {
    *
    * export default defineConfig({
    *   plugins: [
-   *     cloudflareRouter({ routesDir: './worker/routes' }),
+   *     cloudflareRouter(),
    *   ],
    * });
    * ```
@@ -55,7 +55,7 @@ export default function cloudflareRouter(pluginConfig: PluginConfig = {}): Plugi
 
     configResolved(config) {
       rootDir = config.root;
-      routesDir = path.resolve(rootDir, pluginConfig.routesDir ?? './worker/routes');
+      routesDir = path.resolve(rootDir, pluginConfig.routesDir ?? './src/routes');
       syncGeneratedTypes();
     },
 
@@ -100,7 +100,7 @@ export interface Routes {
    * @example
    * ```
    * {
-   *   filePath: '/my-project/worker/routes/api/example.ts',
+   *   filePath: '/my-project/worker/routes/api.example/index.ts',
    *   pattern: '/api/example',
    * }
    * ```
@@ -125,9 +125,9 @@ export interface Routes {
  * match priority (static before param before catch-all).
  * Scanned routes are consumed by `createRouter` to handle routes.
  *
- * Files and directories starting with `_` and `.` are ignored, so shared
- * files can live next to routes (e.g. `/worker/routes/_utils.ts`).
- * Declaration files (`.d.ts`) and test files (`*.test.*`, `*.spec.*`) are also ignored.
+ * Directories starting with `_` are ignored. Every route should have
+ * an `index` file for route handlers. Any file other than an `index` file or
+ * a subdirectory is ignored.
  *
  * @param {string} routesDir - Absolute path to the directory to scan for route files.
  * @returns {Routes[]} A list of routes sorted by match priority.
@@ -136,8 +136,8 @@ export interface Routes {
  * ```ts
  * const routes = scanRoutes('/my-project/worker/routes');
  * // [
- * //   { filePath: '/my-project/worker/routes/api/example.ts', pattern: '/api/example' },
- * //   { filePath: '/my-project/worker/routes/api/example/[id].ts', pattern: '/api/example/[id]' },
+ * //   { filePath: '/my-project/worker/routes/api.example/index.ts', pattern: '/api/example' },
+ * //   { filePath: '/my-project/worker/routes/api.example.[id]/index.ts', pattern: '/api/example/[id]' },
  * // ]
  * ```
  */
@@ -170,8 +170,8 @@ export function scanRoutes(routesDir: string): Routes[] {
  * @example
  * ```ts
  * const routes = sortRoutes([
- *   { filePath: '/my-project/worker/routes/api/example.ts', pattern: '/api/example' },
- *   { filePath: '/my-project/worker/routes/api/example/[id].ts', pattern: '/api/example/[id]' },
+ *   { filePath: '/my-project/worker/routes/api.example/index.ts', pattern: '/api/example' },
+ *   { filePath: '/my-project/worker/routes/api.example.[id]/index.ts', pattern: '/api/example/[id]' },
  * ]);
  */
 export function sortRoutes(routes: Routes[]) {
@@ -312,18 +312,18 @@ function compareSegmentSpecificity(a: Segment[], b: Segment[]) {
   return 0;
 }
 
-function walk(dir: string) {
+function walk(routesDir: string) {
   const filePaths: string[] = [];
 
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('_') || entry.name.startsWith('.')) {
+  for (const entry of fs.readdirSync(routesDir, { withFileTypes: true })) {
+    if (entry.name.startsWith('_')) {
       continue;
     }
-    const fullPath = path.join(dir, entry.name);
+    const fullPath = path.join(routesDir, entry.name);
     if (entry.isDirectory()) {
-      filePaths.push(...walk(fullPath));
+      filePaths.push(routeIndexFile(fullPath));
     }
-    if (entry.isFile() && isRouteFile(entry.name)) {
+    if (entry.isFile() && isIndexFile(entry.name)) {
       filePaths.push(fullPath);
     }
   }
@@ -331,33 +331,28 @@ function walk(dir: string) {
   return filePaths;
 }
 
-function isRouteFile(name: string) {
-  const ROUTE_EXTENSIONS = new Set(['.ts', '.mts', '.js', '.mjs']);
+function routeIndexFile(routeFileDir: string) {
+  for (const entry of fs.readdirSync(routeFileDir, { withFileTypes: true })) {
+    if (entry.isFile() && isIndexFile(entry.name)) {
+      return path.join(routeFileDir, entry.name);
+    }
+  }
+  throw new Error(`No index file found in "${routeFileDir}"`);
+}
 
-  if (name.startsWith('_') || name.startsWith('.')) {
-    return false;
+function isIndexFile(name: string) {
+  const INDEX_FILES = new Set(['index.ts', 'index.mts', 'index.js', 'index.mjs']);
+  if (INDEX_FILES.has(name)) {
+    return true;
   }
-  if (name.endsWith('.d.ts')) {
-    return false;
-  }
-  if (/\.(test|spec)\.[^.]+$/.test(name)) {
-    return false;
-  }
-
-  return ROUTE_EXTENSIONS.has(path.extname(name));
+  return false;
 }
 
 function filePathToPattern(relativeFilePath: string) {
   const VALID_SEGMENT_RE = /^(\[\.\.\.[A-Za-z_$][\w$]*\]|\[[A-Za-z_$][\w$]*\]|[\w.~-]+)$/;
   const withoutExtension = relativeFilePath.replace(/\.[^./]+$/, '');
-  const segments = withoutExtension.split(path.sep).filter(Boolean);
-
-  // An `index` file maps to root route (e.g. `/api/example/index.ts` -> `/api/example`).
-  // Remove the trailing `index` segment so it becomes `['api', 'example']` instead of
-  // `['api', 'example', 'index']`.
-  if (segments[segments.length - 1] === 'index') {
-    segments.pop();
-  }
+  const flatDir = withoutExtension.split(path.sep).slice(0, -1).join('.');
+  const segments = flatDirToSegments(flatDir);
 
   segments.forEach((segment, index) => {
     if (!VALID_SEGMENT_RE.test(segment)) {
@@ -374,6 +369,34 @@ function filePathToPattern(relativeFilePath: string) {
   });
 
   return `/${segments.join('/')}`;
+}
+
+function flatDirToSegments(flatDir: string) {
+  if (flatDir === '') {
+    return [];
+  }
+
+  const segments: string[] = [];
+  let current = '';
+  let bracketDepth = 0;
+
+  for (const char of flatDir) {
+    if (char === '[') {
+      bracketDepth++;
+    }
+    if (char === ']') {
+      bracketDepth--;
+    }
+    if (char === '.' && bracketDepth === 0) {
+      segments.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  segments.push(current);
+  return segments.map((segment) => segment.replaceAll('[.]', '.'));
 }
 
 function assertNoDuplicateRoutePattern(routes: Routes[]) {

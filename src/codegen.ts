@@ -108,7 +108,7 @@ export function generateHandlerTypes(pattern: string) {
 /**
  * Generates `.cloudflare-router/tsconfig.json`.
  * Apps `extends` this file, so `virtual.d.ts` and handler types are loaded.
- * `rootDirs` makes `./+types/[params]` resolve into `./types` from a route file.
+ * `rootDirs` makes `./+types` resolve into `./types` from a route file.
  *
  * @returns {string} The `tsconfig.json` source.
  *
@@ -136,7 +136,7 @@ export function generateTsconfig() {
 /**
  * Writes `.cloudflare-router` that `tsconfig.json` extends, which contains
  * `tsconfig.json`, `virtual.d.ts`, and handler types.
- * Mirroring the source tree so it resolves as `./+types/[params]`.
+ * Mirroring the source tree so it resolves as `./+types`.
  *
  * @param {string} rootDir - The root directory of the project.
  * @param {Routes[]} routes - Scanned routes, used to generate handler types.
@@ -144,7 +144,7 @@ export function generateTsconfig() {
  * @example
  * ```
  * .cloudflare-router/
- * ├── types/src/routes/example/+types/[id].ts
+ * ├── types/src/routes/example.[id]/+types/index.ts
  * ├── tsconfig.json
  * └── virtual.d.ts
  * ```
@@ -171,7 +171,7 @@ function writeHandlerTypes(rootDir: string, routes: Routes[]) {
 
 /**
  * Converts a route file's path to the path of its generated handler types.
- * Mirroring the source tree so it resolves as `./+types/[params]`.
+ * Mirroring the source tree so it resolves as `./+types`.
  *
  * @param {string} rootDir - The root directory of the project.
  * @param {string} routeFile - Path to the route file.
@@ -179,8 +179,8 @@ function writeHandlerTypes(rootDir: string, routes: Routes[]) {
  *
  * @example
  * ```ts
- * toHandlerTypesPath('/app', '/app/src/routes/example/[id].ts');
- * // '/app/.cloudflare-router/types/src/routes/example/+types/[id].ts'
+ * toHandlerTypesPath('/app', '/app/src/routes/example.[id]/index.ts');
+ * // '/app/.cloudflare-router/types/src/routes/example.[id]/+types/index.ts'
  * ```
  */
 export function toHandlerTypesPath(rootDir: string, routeFile: string) {

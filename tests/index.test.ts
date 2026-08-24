@@ -31,13 +31,13 @@ describe('scanRoutes', () => {
     vol.reset();
   });
 
-  test('scans route files', () => {
+  test('scans route directories', () => {
     const routesDir = genRoutesFixture([
       '/index.ts',
       '/api/index.ts',
-      '/api/test/index.ts',
-      '/api/test/[id].ts',
-      '/api/test/[...catchall].ts',
+      '/api.test/index.ts',
+      '/api.test.[id]/index.ts',
+      '/api.test.[...catchall]/index.ts',
     ]);
 
     const routes = scanRoutes(routesDir);
@@ -52,79 +52,63 @@ describe('scanRoutes', () => {
     ]);
   });
 
-  test('ignores underscore-prefixed files and directories', () => {
-    const routesDir = genRoutesFixture([
-      '/index.ts',
-      '/api/index.ts',
-      '/api/test/index.ts',
-      '/api/test/[id].ts',
-      '/api/test/[...catchall].ts',
-      '/api/_utils.ts',
-      '/api/_shared/index.ts',
-    ]);
-
-    const routes = scanRoutes(routesDir);
-    const patterns = routes.map((route) => route.pattern);
-
-    expect(patterns).toStrictEqual([
-      '/',
-      '/api',
-      '/api/test',
-      '/api/test/[id]',
-      '/api/test/[...catchall]',
-    ]);
-  });
-
-  test('ignores declaration files', () => {
-    const routesDir = genRoutesFixture([
-      '/index.ts',
-      '/api/index.ts',
-      '/api/test/index.ts',
-      '/api/test/[id].ts',
-      '/api/test/[...catchall].ts',
-      '/api/types.d.ts',
-    ]);
-
-    const routes = scanRoutes(routesDir);
-    const patterns = routes.map((route) => route.pattern);
-
-    expect(patterns).toStrictEqual([
-      '/',
-      '/api',
-      '/api/test',
-      '/api/test/[id]',
-      '/api/test/[...catchall]',
-    ]);
-  });
-
-  test('ignores test files', () => {
-    const routesDir = genRoutesFixture([
-      '/index.ts',
-      '/api/index.ts',
-      '/api/test/index.ts',
-      '/api/test/[id].ts',
-      '/api/test/[...catchall].ts',
-      '/api/index.test.ts',
-      '/api/index.spec.ts',
-    ]);
-
-    const routes = scanRoutes(routesDir);
-    const patterns = routes.map((route) => route.pattern);
-
-    expect(patterns).toStrictEqual([
-      '/',
-      '/api',
-      '/api/test',
-      '/api/test/[id]',
-      '/api/test/[...catchall]',
-    ]);
-  });
-
-  test('keeps dots in route names', () => {
+  test('ignores underscore-prefixed directories', () => {
     // oxfmt-ignore
     const routesDir = genRoutesFixture([
-      '/api/v1.5/index.ts',
-      '/test.json.ts',
+      '/index.ts',
+      '/api/index.ts',
+      '/_shared/index.ts',
+    ]);
+
+    const routes = scanRoutes(routesDir);
+    const patterns = routes.map((route) => route.pattern);
+
+    // oxfmt-ignore
+    expect(patterns).toStrictEqual([
+      '/',
+      '/api',
+    ]);
+  });
+
+  test('ignores non-index files', () => {
+    const routesDir = genRoutesFixture([
+      '/index.ts',
+      '/utils.ts',
+      '/api/index.ts',
+      '/api/utils.ts',
+    ]);
+
+    const routes = scanRoutes(routesDir);
+    const patterns = routes.map((route) => route.pattern);
+
+    // oxfmt-ignore
+    expect(patterns).toStrictEqual([
+      '/',
+      '/api',
+    ]);
+  });
+
+  test('ignores subdirectories', () => {
+    const routesDir = genRoutesFixture([
+      '/api.test/index.ts',
+      '/api.test/shared/schema.ts',
+      '/api.test/shared/utils.ts',
+    ]);
+
+    const routes = scanRoutes(routesDir);
+    const patterns = routes.map((route) => route.pattern);
+
+    // oxfmt-ignore
+    expect(patterns).toStrictEqual([
+      '/api/test',
+    ]);
+  });
+
+  test('escapes literal dots with [.]', () => {
+    // oxfmt-ignore
+    const routesDir = genRoutesFixture([
+      '/api.v1[.]5/index.ts',
+      '/test[.]json/index.ts',
     ]);
 
     const routes = scanRoutes(routesDir);
@@ -140,36 +124,33 @@ describe('scanRoutes', () => {
   test('throws on invalid segments', () => {
     // oxfmt-ignore
     const routesDir = genRoutesFixture([
-      '/api/test/[invalid.ts',
+      '/api.test.[id/index.ts',
     ]);
 
     expect(() => scanRoutes(routesDir)).toThrow(
-      'Invalid route segment "[invalid" in "/api/test/[invalid.ts". ' +
+      'Invalid route segment "[id" in "/api.test.[id/index.ts". ' +
         'Use plain names, [param], or [...catchall].',
-    );
-  });
-
-  test('throws on duplicate route patterns', () => {
-    // oxfmt-ignore
-    const routesDir = genRoutesFixture([
-      '/api.ts',
-      '/api/index.ts',
-    ]);
-
-    expect(() => scanRoutes(routesDir)).toThrow(
-      'Duplicate route pattern "/api":\n  - "/routes/api/index.ts"\n  - "/routes/api.ts"',
     );
   });
 
   test('throws on catch-all segments with children', () => {
     // oxfmt-ignore
     const routesDir = genRoutesFixture([
-      '/api/test/[...catchall]/invalid.ts',
+      '/api.test.[...catchall].invalid/index.ts',
     ]);
 
     expect(() => scanRoutes(routesDir)).toThrow(
-      'Catch-all segment "[...catchall]" must be the last segment in "/api/test/[...catchall]/invalid.ts"',
+      'Catch-all segment "[...catchall]" must be the last segment in "/api.test.[...catchall].invalid/index.ts"',
     );
+  });
+
+  test('throws on no index file', () => {
+    // oxfmt-ignore
+    const routesDir = genRoutesFixture([
+      '/api/utils.ts',
+    ]);
+
+    expect(() => scanRoutes(routesDir)).toThrow('No index file found in "/routes/api"');
   });
 
   test('returns empty array for a missing directory', () => {

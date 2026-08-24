@@ -11,12 +11,12 @@ describe('generateVirtualModule', () => {
   test('generates imports and route definitions', () => {
     const module = generateVirtualModule([
       { filePath: '/my-app/worker/routes/api/index.ts', pattern: '/api' },
-      { filePath: '/my-app/worker/routes/api/test/[id].ts', pattern: '/api/test/[id]' },
+      { filePath: '/my-app/worker/routes/api.test.[id]/index.ts', pattern: '/api/test/[id]' },
     ]);
 
     expect(module).toMatchInlineSnapshot(`
       "import * as module$0 from "/my-app/worker/routes/api/index.ts";
-      import * as module$1 from "/my-app/worker/routes/api/test/[id].ts";
+      import * as module$1 from "/my-app/worker/routes/api.test.[id]/index.ts";
 
       export const routes = [
         {
@@ -103,9 +103,11 @@ describe('generateTsconfig', () => {
 describe('toHandlerTypesPath', () => {
   test('mirrors route file path', () => {
     const rootDir = '/my-app';
-    const routeFile = '/my-app/src/routes/api/test/[params].ts';
+    const routeFile = '/my-app/src/routes/api.test.[params]/index.ts';
     const path = toHandlerTypesPath(rootDir, routeFile);
 
-    expect(path).toBe('/my-app/.cloudflare-router/types/src/routes/api/test/+types/[params].ts');
+    expect(path).toBe(
+      '/my-app/.cloudflare-router/types/src/routes/api.test.[params]/+types/index.ts',
+    );
   });
 });
