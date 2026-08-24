@@ -5,7 +5,7 @@ import { defineHandler as _defineHandler, json } from '../src/runtime.js';
 describe('DefineHandler', () => {
   test('infers params', () => {
     const defineHandler = _defineHandler as DefineHandler<{ message: string }>;
-    const GET = defineHandler(({ params }) => json({ message: params.message }));
+    const GET = defineHandler().handle(({ params }) => json({ message: params.message }));
 
     type Payload = Awaited<ReturnType<ReturnType<typeof GET>['json']>>;
     expectTypeOf<Payload>().toEqualTypeOf<{ message: string }>();
@@ -13,7 +13,9 @@ describe('DefineHandler', () => {
 
   test('infers catch-all params', () => {
     const defineHandler = _defineHandler as DefineHandler<{ catchall: string[] }>;
-    const GET = defineHandler(({ params }) => json({ message: params.catchall.join(',') }));
+    const GET = defineHandler().handle(({ params }) =>
+      json({ message: params.catchall.join(',') }),
+    );
 
     type Payload = Awaited<ReturnType<ReturnType<typeof GET>['json']>>;
     expectTypeOf<Payload>().toEqualTypeOf<{ message: string }>();

@@ -85,10 +85,10 @@ export function generateVirtualModuleAmbient() {
  * @example
  * ```ts
  * // e.g. /api/hello/[name].ts
- * import { defineHandler } from 'vite-plugin-cloudflare-router/runtime';
+ * import { defineHandler, json } from './+types/[name]';
  *
- * const handler = defineHandler(({ params }) => {
- *   return new Response(`Hello, ${params.name}!`);
+ * export const GET = defineHandler().handle(({ params }) => {
+ *   return json({ message: `Hello ${params.name}!` });
  * });
  * ```
  */

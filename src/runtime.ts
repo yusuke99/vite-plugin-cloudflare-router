@@ -150,24 +150,43 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
 }
 
 /**
- * Identity helper that types a route handler.
+ * Builder returned by `defineHandler`.
  *
- * @param {H} handler - The route handler to be typed.
- * @returns {H} The typed route handler.
+ * @template P - Params from the route's pattern (e.g. `/api/example/[id]` -> `{ id: string }`).
  *
  * @example
  * ```ts
  * import { json, defineHandler } from './+types/[name]';
  *
- * export const GET = defineHandler(({ params, env }) => {
+ * export const GET = defineHandler().handle(({ params }) => {
  *   return json({ message: `Hello ${params.name}!` });
  * });
  * ```
  */
-export function defineHandler<H extends (context: RouteContext) => Response | Promise<Response>>(
-  handler: H,
-): H {
-  return handler;
+export interface HandlerBuilder<P = Params> {
+  handle<H extends (context: RouteContext<Cloudflare.Env, P>) => Response | Promise<Response>>(
+    handler: H,
+  ): H;
+}
+
+/**
+ * Starts a route handler builder.
+ *
+ * @returns {HandlerBuilder} A builder for the route handler.
+ *
+ * @example
+ * ```ts
+ * import { json, defineHandler } from './+types/[name]';
+ *
+ * export const GET = defineHandler().handle(({ params }) => {
+ *   return json({ message: `Hello ${params.name}!` });
+ * });
+ * ```
+ */
+export function defineHandler(): HandlerBuilder {
+  return {
+    handle: (handler) => handler,
+  };
 }
 
 /**
@@ -182,9 +201,7 @@ export function defineHandler<H extends (context: RouteContext) => Response | Pr
  * ```
  */
 export interface DefineHandler<P = Params> {
-  <H extends (context: RouteContext<Cloudflare.Env, P>) => Response | Promise<Response>>(
-    handler: H,
-  ): H;
+  (): HandlerBuilder<P>;
 }
 
 function match(routes: RouteDefinition[], pathname: string): Route | undefined {
