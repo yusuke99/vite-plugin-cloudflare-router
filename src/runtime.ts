@@ -38,9 +38,9 @@ type FallbackHandler<E = Cloudflare.Env> = (
 ) => Response | Promise<Response>;
 
 type RouteModule = {
-  [M in HttpMethod]?: RouteHandler<Cloudflare.Env>;
+  [M in HttpMethod]?: RouteHandler;
 } & {
-  ALL?: RouteHandler<Cloudflare.Env>;
+  ALL?: RouteHandler;
 };
 
 export type Segment =
@@ -149,24 +149,52 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
   return { handle };
 }
 
+declare const EXT: unique symbol;
+
+/**
+ * Response returned by `next()` inside a middleware. Carries the extended context which
+ * makes `defineHandler().use()` and `defineHandler().handle()` able to access.
+ */
+export type NextResponse<Ext extends object = {}> = Response & { readonly [EXT]?: Ext };
+
+/**
+ * Runs the rest of the chain; another middleware if any and then handler.
+ */
+export type Next = <Ext extends object = {}>(ext?: Ext) => Promise<NextResponse<Ext>>;
+
+/**
+ * A middleware built by `defineMiddleware` which is then used by `defineHandler().use()`.
+ * Either returns a `Response` to early return, or calls `next()` to continue the chain.
+ */
+export type Middleware<C = RouteContext, Ext extends object = {}> = (
+  context: C,
+  next: Next,
+) => Response | NextResponse<Ext> | Promise<Response | NextResponse<Ext>>;
+
 /**
  * Builder returned by `defineHandler`.
  *
- * @template P - Params from the route's pattern (e.g. `/api/example/[id]` -> `{ id: string }`).
+ * @template {Params} P
+ * @template {RouteContext} C
  *
  * @example
  * ```ts
- * import { json, defineHandler } from './+types';
+ * import { defineHandler, defineMiddleware, json } from './+types';
  *
- * export const GET = defineHandler().handle(({ params }) => {
- *   return json({ message: `Hello ${params.name}!` });
+ * const requestId = defineMiddleware().handle((c, next) => {
+ *   return next({ requestId: crypto.randomUUID() });
  * });
+ *
+ * export const GET = defineHandler()
+ *   .use(requestId)
+ *   .handle(({ requestId }) => {
+ *     return json({ message: `requestId: ${requestId}` });
+ *   });
  * ```
  */
-export interface HandlerBuilder<P = Params> {
-  handle<H extends (context: RouteContext<Cloudflare.Env, P>) => Response | Promise<Response>>(
-    handler: H,
-  ): H;
+export interface HandlerBuilder<C = RouteContext, P = Params> {
+  use<Ext extends object = {}>(middleware: Middleware<C, Ext>): HandlerBuilder<C & Ext, P>;
+  handle<H extends (context: C) => Response | Promise<Response>>(handler: H): H;
 }
 
 /**
@@ -176,7 +204,7 @@ export interface HandlerBuilder<P = Params> {
  *
  * @example
  * ```ts
- * import { json, defineHandler } from './+types';
+ * import { defineHandler, json } from './+types';
  *
  * export const GET = defineHandler().handle(({ params }) => {
  *   return json({ message: `Hello ${params.name}!` });
@@ -184,8 +212,100 @@ export interface HandlerBuilder<P = Params> {
  * ```
  */
 export function defineHandler(): HandlerBuilder {
+  return handlerBuilder([]);
+}
+
+function handlerBuilder(middlewares: Middleware<any, any>[]): HandlerBuilder<any, any> {
   return {
-    handle: (handler) => handler,
+    use: (middleware: Middleware<any, any>) => handlerBuilder([...middlewares, middleware]),
+    handle: (handler) => {
+      if (middlewares.length === 0) {
+        return handler;
+      }
+      const handle = (context: any) => dispatchMiddlewares(middlewares, context, handler);
+      return handle as typeof handler;
+    },
+  };
+}
+
+async function dispatchMiddlewares(
+  middlewares: Middleware<any, any>[],
+  context: any,
+  handler: (context: any) => Response | Promise<Response>,
+) {
+  let called = -1;
+
+  async function dispatch(index: number, context: any) {
+    if (index <= called) {
+      throw new Error('next() called multiple times');
+    }
+
+    called = index;
+    const middleware = middlewares[index];
+
+    if (!middleware) {
+      return handler(context);
+    }
+
+    const next: Next = (ext) => dispatch(index + 1, ext ? { ...context, ...ext } : context);
+    const result = await middleware(context, next);
+
+    if (!(result instanceof Response)) {
+      throw new Error('Middleware must call next() or return a Response');
+    }
+
+    return result;
+  }
+
+  return dispatch(0, context);
+}
+
+/**
+ * Builder returned by `defineMiddleware`.
+ *
+ * @template {Params} P
+ * @template {RouteContext<Cloudflare.Env, P>} C
+ *
+ * @example
+ * ```ts
+ * import { defineMiddleware, json } from './+types';
+ *
+ * export const requestId = defineMiddleware().handle((c, next) => {
+ *   return next({ requestId: crypto.randomUUID() });
+ * });
+ * ```
+ */
+export interface MiddlewareBuilder<P = Params, C = RouteContext<Cloudflare.Env, P>> {
+  handle<Ext extends object = {}>(
+    middleware: (
+      context: C,
+      next: Next,
+    ) => Response | NextResponse<Ext> | Promise<Response | NextResponse<Ext>>,
+  ): Middleware<C, Ext>;
+}
+
+/**
+ * Starts a middleware builder. The built middleware is passed to
+ * `defineHandler().use()`.
+ *
+ * @returns {MiddlewareBuilder} A builder for the middleware.
+ *
+ * @example
+ * ```ts
+ * import { defineHandler, defineMiddleware, json } from './+types';
+ *
+ * const requestId = defineMiddleware().handle((c, next) => {
+ *   return next({ requestId: crypto.randomUUID() });
+ * });
+ *
+ * export const GET = defineHandler()
+ *   .use(requestId)
+ *   .handle(({ requestId }) => json({ requestId }));
+ * ```
+ */
+export function defineMiddleware(): MiddlewareBuilder {
+  return {
+    handle: (middleware) => middleware,
   };
 }
 
@@ -193,7 +313,7 @@ export function defineHandler(): HandlerBuilder {
  * Call signature of `defineHandler` for each route.
  * Generated `./+types` casts `defineHandler` so `params` are inferred.
  *
- * @template P - Params from the route's pattern (e.g. `/api/example/[id]` -> `{ id: string }`).
+ * @template {Params} P
  *
  * @example
  * ```ts
@@ -201,7 +321,22 @@ export function defineHandler(): HandlerBuilder {
  * ```
  */
 export interface DefineHandler<P = Params> {
-  (): HandlerBuilder<P>;
+  (): HandlerBuilder<RouteContext<Cloudflare.Env, P>, P>;
+}
+
+/**
+ * Call signature of `defineMiddleware` for each route.
+ * Generated `./+types` casts `defineMiddleware` so `params` are inferred.
+ *
+ * @template {Params} P
+ *
+ * @example
+ * ```ts
+ * export const defineMiddleware = $defineMiddleware as DefineMiddleware<{ id: string }>;
+ * ```
+ */
+export interface DefineMiddleware<P = Params> {
+  (): MiddlewareBuilder<P>;
 }
 
 function match(routes: RouteDefinition[], pathname: string): Route | undefined {

@@ -1,6 +1,10 @@
-import type { DefineHandler } from '../src/runtime.js';
+import type { DefineHandler, DefineMiddleware } from '../src/runtime.js';
 import { describe, expectTypeOf, test } from 'vite-plus/test';
-import { defineHandler as _defineHandler, json } from '../src/runtime.js';
+import {
+  defineHandler as _defineHandler,
+  defineMiddleware as _defineMiddleware,
+  json,
+} from '../src/runtime.js';
 
 describe('DefineHandler', () => {
   test('infers params', () => {
@@ -19,5 +23,24 @@ describe('DefineHandler', () => {
 
     type Payload = Awaited<ReturnType<ReturnType<typeof GET>['json']>>;
     expectTypeOf<Payload>().toEqualTypeOf<{ message: string }>();
+  });
+
+  test('infers context extended by .use()', () => {
+    const defineHandler = _defineHandler as DefineHandler<{ id: string }>;
+    const defineMiddleware = _defineMiddleware as unknown as DefineMiddleware<{ id: string }>;
+
+    const mw1 = defineMiddleware().handle((_, next) => next({ mw1: true }));
+    const mw2 = defineMiddleware().handle((_, next) => next({ mw2: true }));
+    const GET = defineHandler()
+      .use(mw1)
+      .use(mw2)
+      .handle(({ params, mw1, mw2 }) => {
+        expectTypeOf(mw1).toEqualTypeOf<boolean>();
+        expectTypeOf(mw2).toEqualTypeOf<boolean>();
+        return json({ id: params.id, mw1, mw2 });
+      });
+
+    type Payload = Awaited<ReturnType<ReturnType<typeof GET>['json']>>;
+    expectTypeOf<Payload>().toEqualTypeOf<{ id: string; mw1: boolean; mw2: boolean }>();
   });
 });
