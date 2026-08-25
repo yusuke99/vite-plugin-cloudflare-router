@@ -2,7 +2,7 @@ import type { ExecutionContext, HttpMethod, RouteDefinition } from '../src/runti
 import { describe, expect, test } from 'vite-plus/test';
 import { createRouter, defineHandler, defineMiddleware, json } from '../src/runtime.js';
 
-const ctx: ExecutionContext = {
+const executionContext: ExecutionContext = {
   waitUntil() {},
   passThroughOnException() {},
 };
@@ -54,7 +54,7 @@ const routes: RouteDefinition[] = [
 
 async function request(method: HttpMethod, path: string, env: Cloudflare.Env = {}) {
   const router = createRouter(routes);
-  return router.fetch(new Request(`https://example.com${path}`, { method }), env, ctx);
+  return router.fetch(new Request(`https://example.com${path}`, { method }), env, executionContext);
 }
 
 describe('createRouter', () => {
@@ -99,7 +99,7 @@ describe('createRouter', () => {
     const res = await router.fetch(
       new Request('https://example.com/api/test', { method: 'HEAD' }),
       {},
-      ctx,
+      executionContext,
     );
 
     expect(res.status).toBe(200);
@@ -139,7 +139,11 @@ describe('createRouter', () => {
   test('supports a custom fallback', async () => {
     const response = new Response('teapot', { status: 418 });
     const router = createRouter(routes, { fallback: () => response });
-    const res = await router.fetch(new Request('https://example.com/missing'), {}, ctx);
+    const res = await router.fetch(
+      new Request('https://example.com/missing'),
+      {},
+      executionContext,
+    );
 
     expect(res).toBe(response);
   });
@@ -150,7 +154,7 @@ describe('defineMiddleware', () => {
     return handler({
       request: new Request('https://example.com/'),
       env: {},
-      ctx,
+      executionContext,
       params: {},
     });
   }
@@ -225,7 +229,10 @@ describe('defineMiddleware', () => {
       .handle(() => json({}));
 
     await expect(dispatch(handler)).rejects.toThrow(
-      'Middleware must call next() or return a Response',
+      [
+        'Middleware must return a response.',
+        'To continue the chain, return the result of next(): `return await next();`',
+      ].join('\n'),
     );
   });
 
@@ -238,6 +245,11 @@ describe('defineMiddleware', () => {
       .use(mw)
       .handle(() => json({}));
 
-    await expect(dispatch(handler)).rejects.toThrow('next() called multiple times');
+    await expect(dispatch(handler)).rejects.toThrow(
+      [
+        'next() was called multiple times.',
+        'To continue the chain, return the result of next(): `return await next();`',
+      ].join('\n'),
+    );
   });
 });

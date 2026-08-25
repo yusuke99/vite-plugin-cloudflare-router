@@ -24,8 +24,10 @@ describe('DefineHandler', () => {
     type Payload = Awaited<ReturnType<ReturnType<typeof GET>['json']>>;
     expectTypeOf<Payload>().toEqualTypeOf<{ message: string }>();
   });
+});
 
-  test('infers context extended by .use()', () => {
+describe('DefineMiddleware', () => {
+  test('infers extended context by .use()', () => {
     const defineHandler = _defineHandler as DefineHandler<{ id: string }>;
     const defineMiddleware = _defineMiddleware as unknown as DefineMiddleware<{ id: string }>;
 

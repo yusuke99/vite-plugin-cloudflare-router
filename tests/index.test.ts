@@ -161,9 +161,9 @@ describe('scanRoutes', () => {
 describe('sortRoutes', () => {
   test('sorts static before param before catch-all', () => {
     const routes = [
-      { filePath: '/routes/api/test/[...catchall].ts', pattern: '/api/test/[...catchall]' },
-      { filePath: '/routes/api/test.ts', pattern: '/api/test' },
-      { filePath: '/routes/api/test/[id].ts', pattern: '/api/test/[id]' },
+      { filePath: '/routes/api.test.[...catchall]/index.ts', pattern: '/api/test/[...catchall]' },
+      { filePath: '/routes/api.test/index.ts', pattern: '/api/test' },
+      { filePath: '/routes/api.test.[id]/index.ts', pattern: '/api/test/[id]' },
     ];
 
     const entries = sortRoutes(routes);
@@ -213,53 +213,51 @@ describe('resolveHandlerTypesImport', () => {
     vol.reset();
   });
 
-  test('maps ./+types/[params]', () => {
+  test('maps dynamic params', () => {
     const typesPath = path.join(
       rootDir,
       '.cloudflare-router',
       'types',
       'src',
       'routes',
-      'api',
-      'test',
+      'api.test.[params]',
       '+types',
-      '[params].ts',
+      'index.ts',
     );
     vol.fromJSON({
       [typesPath]: '',
     });
 
-    const id = './+types/[params]';
-    const importer = path.join(rootDir, './src/routes/api/test/[params].ts');
+    const id = './+types';
+    const importer = path.join(rootDir, './src/routes/api.test.[params]/index.ts');
     const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
 
     expect(resolvedPath).toBe(typesPath);
   });
 
-  test('maps ./+types/[...catchall]', () => {
+  test('maps catch-all params', () => {
     const typesPath = path.join(
       rootDir,
       '.cloudflare-router',
       'types',
       'src',
       'routes',
-      'api',
-      'test',
+      'api.test.[...catchall]',
       '+types',
-      '[...catchall].ts',
+      'index.ts',
     );
     vol.fromJSON({
       [typesPath]: '',
     });
 
-    const id = './+types/[...catchall]';
-    const importer = path.join(rootDir, './src/routes/api/test/[...catchall].ts');
+    const id = './+types';
+    const importer = path.join(rootDir, './src/routes/api.test.[...catchall]/index.ts');
     const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
 
     expect(resolvedPath).toBe(typesPath);
   });
 
-  test('maps ./+types to +types/index.ts', () => {
+  test('maps static params', () => {
     const typesPath = path.join(
       rootDir,
       '.cloudflare-router',

@@ -23,7 +23,7 @@ type Params = Record<string, string | string[]>;
 export interface RouteContext<E = Cloudflare.Env, P = Params> {
   request: Request;
   env: E;
-  ctx: ExecutionContext;
+  executionContext: ExecutionContext;
   params: P;
 }
 
@@ -34,7 +34,7 @@ export type RouteHandler<E = Cloudflare.Env, P = Params> = (
 type FallbackHandler<E = Cloudflare.Env> = (
   request: Request,
   env: E,
-  ctx: ExecutionContext,
+  executionContext: ExecutionContext,
 ) => Response | Promise<Response>;
 
 type RouteModule = {
@@ -67,7 +67,7 @@ interface RouterConfig<E = Cloudflare.Env> {
    * @example
    * ```ts
    * const router = createRouter(routes, {
-   *   fallback: (request, env, ctx) => {
+   *   fallback: (request, env, executionContext) => {
    *     return new Response('Not Found', { status: 404 });
    *   },
    * });
@@ -82,7 +82,7 @@ interface Router<E = Cloudflare.Env> {
    *
    * @param {Request} request - The incoming request.
    * @param {E} env - Cloudflare's environment bindings.
-   * @param {ExecutionContext} ctx - Cloudflare's execution context.
+   * @param {ExecutionContext} executionContext - Cloudflare's execution context.
    * @returns {Promise<Response>} The response to the incoming request.
    *
    * @example
@@ -91,7 +91,7 @@ interface Router<E = Cloudflare.Env> {
    * export default router;
    * ```
    */
-  fetch(request: Request, env: E, ctx: ExecutionContext): Promise<Response>;
+  fetch(request: Request, env: E, executionContext: ExecutionContext): Promise<Response>;
 }
 
 /**
@@ -115,16 +115,16 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
   routes: RouteDefinition[],
   config: RouterConfig<E> = {},
 ): Router<E> {
-  async function fetch(request: Request, env: E, ctx: ExecutionContext) {
+  async function fetch(request: Request, env: E, executionContext: ExecutionContext) {
     const url = new URL(request.url);
     const route = match(routes, url.pathname);
 
     if (!route) {
       const fallback = config.fallback ?? defaultFallback;
-      return fallback(request, env, ctx);
+      return fallback(request, env, executionContext);
     }
 
-    return dispatch(request.method, route, request, env, ctx);
+    return dispatch(request.method, route, request, env, executionContext);
   }
 
   async function dispatch(
@@ -132,15 +132,15 @@ export function createRouter<E extends Cloudflare.Env = Cloudflare.Env>(
     route: Route,
     request: Request,
     env: E,
-    ctx: ExecutionContext,
+    executionContext: ExecutionContext,
   ): Promise<Response> {
     if (method === 'HEAD') {
-      const response = await dispatch('GET', route, request, env, ctx);
+      const response = await dispatch('GET', route, request, env, executionContext);
       return new Response(null, response);
     }
     const { module, params } = route;
     const handler = resolveHandler(method, module);
-    return handler({ request, env, ctx, params });
+    return handler({ request, env, executionContext, params });
   }
 
   return { fetch };
@@ -234,7 +234,12 @@ async function dispatchMiddlewares(
 
   async function dispatch(index: number, context: any) {
     if (index <= called) {
-      throw new Error('next() called multiple times');
+      throw new Error(
+        [
+          'next() was called multiple times.',
+          'To continue the chain, return the result of next(): `return await next();`',
+        ].join('\n'),
+      );
     }
 
     called = index;
@@ -248,7 +253,12 @@ async function dispatchMiddlewares(
     const result = await middleware(context, next);
 
     if (!(result instanceof Response)) {
-      throw new Error('Middleware must call next() or return a Response');
+      throw new Error(
+        [
+          'Middleware must return a response.',
+          'To continue the chain, return the result of next(): `return await next();`',
+        ].join('\n'),
+      );
     }
 
     return result;

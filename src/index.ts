@@ -241,8 +241,8 @@ function isFileInsideOf(file: string, dir: string) {
 }
 
 /**
- * Maps handler types import (e.g. `./+types`, `./+types/[params]`, `./+types/[...catchall]`) to
- * `.cloudflare-router/types/<mirrored source>/+types/...`.
+ * Maps handler types import (`./+types`) to
+ * `.cloudflare-router/types/<mirrored source>/+types/index.ts`.
  *
  * @param {string} rootDir - The root directory of the project.
  * @param {string} id - The import specifier of handler types.
@@ -252,11 +252,11 @@ function isFileInsideOf(file: string, dir: string) {
  * @example
  * ```ts
  * const rootDir = '/my-project';
- * const id = './+types/[id]';
- * const importer = '/my-project/worker/routes/api/example/[id].ts';
+ * const id = './+types';
+ * const importer = '/my-project/src/routes/api.example.[id]/index.ts';
  *
  * resolveHandlerTypesImport(rootDir, id, importer);
- * // '/my-project/.cloudflare-router/types/worker/routes/api/example/+types/[id].ts'
+ * // '/my-project/.cloudflare-router/types/src/routes/api.example.[id]/+types/index.ts'
  * ```
  *
  */

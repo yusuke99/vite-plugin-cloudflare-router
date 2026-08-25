@@ -84,8 +84,8 @@ export function generateVirtualModuleAmbient() {
  *
  * @example
  * ```ts
- * // e.g. /api/hello/[name].ts
- * import { defineHandler, json } from './+types/[name]';
+ * // e.g. src/routes/api.hello.[name]/index.ts
+ * import { defineHandler, json } from './+types';
  *
  * export const GET = defineHandler().handle(({ params }) => {
  *   return json({ message: `Hello ${params.name}!` });
