@@ -3,12 +3,19 @@ import type { Plugin } from 'vite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { exactRegex } from '@rolldown/pluginutils';
-import { TYPES_ROOT_DIR, generateVirtualModule, writeGeneratedTypes } from './codegen.js';
+import {
+  TYPES_ROOT_DIR,
+  generateHandlerRuntime,
+  generateVirtualRoutesModule,
+  writeGeneratedTypes,
+} from './codegen.js';
 
 const PLUGIN_NAME = 'vite-plugin-cloudflare-router';
-const VIRTUAL_MODULE_ID = 'virtual:cloudflare-router';
-const RESOLVED_VIRTUAL_MODULE_ID = '\0' + VIRTUAL_MODULE_ID;
-const HANDLER_TYPES_IMPORT_RE = /^\.\/\+types(?:\/|$)/;
+const VIRTUAL_ROUTES_MODULE_ID = 'virtual:cloudflare-router';
+const RESOLVED_VIRTUAL_ROUTES_MODULE_ID = '\0' + VIRTUAL_ROUTES_MODULE_ID;
+const VIRTUAL_HANDLER_MODULE_ID = 'virtual:cloudflare-router/+types';
+const RESOLVED_VIRTUAL_HANDLER_MODULE_ID = '\0' + VIRTUAL_HANDLER_MODULE_ID;
+const HANDLER_IMPORT_RE = /^\.\/\+types(?:\/|$)/;
 
 interface PluginConfig {
   /**
@@ -61,24 +68,30 @@ export default function cloudflareRouter(pluginConfig: PluginConfig = {}): Plugi
 
     resolveId: {
       filter: {
-        id: [exactRegex(VIRTUAL_MODULE_ID), HANDLER_TYPES_IMPORT_RE],
+        id: [exactRegex(VIRTUAL_ROUTES_MODULE_ID), HANDLER_IMPORT_RE],
       },
-      handler(id, importer) {
-        if (id === VIRTUAL_MODULE_ID) {
-          return RESOLVED_VIRTUAL_MODULE_ID;
+      handler(id) {
+        if (id === VIRTUAL_ROUTES_MODULE_ID) {
+          return RESOLVED_VIRTUAL_ROUTES_MODULE_ID;
         }
-        return resolveHandlerTypesImport(rootDir, id, importer);
+        return resolveHandlerImport(id);
       },
     },
 
     load: {
       filter: {
-        id: exactRegex(RESOLVED_VIRTUAL_MODULE_ID),
+        id: [
+          exactRegex(RESOLVED_VIRTUAL_ROUTES_MODULE_ID),
+          exactRegex(RESOLVED_VIRTUAL_HANDLER_MODULE_ID),
+        ],
       },
-      handler() {
+      handler(id) {
+        if (id === RESOLVED_VIRTUAL_HANDLER_MODULE_ID) {
+          return generateHandlerRuntime();
+        }
         this.addWatchFile(routesDir);
         const routes = scanRoutes(routesDir);
-        return generateVirtualModule(routes);
+        return generateVirtualRoutesModule(routes);
       },
     },
 
@@ -87,7 +100,9 @@ export default function cloudflareRouter(pluginConfig: PluginConfig = {}): Plugi
         return;
       }
       syncGeneratedTypes();
-      const virtualModule = this.environment.moduleGraph.getModuleById(RESOLVED_VIRTUAL_MODULE_ID);
+      const virtualModule = this.environment.moduleGraph.getModuleById(
+        RESOLVED_VIRTUAL_ROUTES_MODULE_ID,
+      );
       return virtualModule ? [...modules, virtualModule] : undefined;
     },
   };
@@ -241,48 +256,23 @@ function isFileInsideOf(file: string, dir: string) {
 }
 
 /**
- * Maps handler types import (`./+types`) to
- * `.cloudflare-router/types/<mirrored source>/+types/index.ts`.
+ * Maps handler types import (`./+types`) to runtime module.
  *
- * @param {string} rootDir - The root directory of the project.
- * @param {string} id - The import specifier of handler types.
- * @param {string | undefined} importer - Absolute path of the file that imported `id`.
- * @returns {string | undefined} The path to the handler types file or undefined if importer is undefined.
+ * @param {string} id - The import specifier.
+ * @returns {string | undefined} The resolved virtual module id.
  *
  * @example
  * ```ts
- * const rootDir = '/my-project';
- * const id = './+types';
- * const importer = '/my-project/src/routes/api.example.[id]/index.ts';
- *
- * resolveHandlerTypesImport(rootDir, id, importer);
- * // '/my-project/.cloudflare-router/types/src/routes/api.example.[id]/+types/index.ts'
+ * resolveHandlerTypesImport('./+types');
+ * // '\0virtual:cloudflare-router/+types'
  * ```
- *
  */
-export function resolveHandlerTypesImport(
-  rootDir: string,
-  id: string,
-  importer: string | undefined,
-) {
-  if (!importer) {
-    return;
-  }
+export function resolveHandlerImport(id: string) {
   const specifier = id.split('?')[0] ?? id;
-  if (!HANDLER_TYPES_IMPORT_RE.test(specifier)) {
+  if (!HANDLER_IMPORT_RE.test(specifier)) {
     return;
   }
-  const normalizedSpecifier = specifier === './+types' ? './+types/index' : specifier;
-  const absolutePath = path.resolve(path.dirname(importer), normalizedSpecifier);
-  const relativePath = path.relative(rootDir, absolutePath);
-  const typeFile =
-    relativePath.endsWith('.ts') || relativePath.endsWith('.js')
-      ? relativePath
-      : `${relativePath}.ts`;
-  const typesPath = path.join(rootDir, TYPES_ROOT_DIR, 'types', typeFile);
-  if (fs.existsSync(typesPath)) {
-    return typesPath;
-  }
+  return RESOLVED_VIRTUAL_HANDLER_MODULE_ID;
 }
 
 function compareSegmentSpecificity(a: Segment[], b: Segment[]) {

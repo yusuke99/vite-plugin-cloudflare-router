@@ -1,12 +1,8 @@
 import path from 'node:path';
 import { vol } from 'memfs';
 import { beforeEach, describe, expect, test, vi } from 'vite-plus/test';
-import {
-  patternToSegments,
-  resolveHandlerTypesImport,
-  scanRoutes,
-  sortRoutes,
-} from '../src/index.js';
+import { writeGeneratedTypes } from '../src/codegen.js';
+import { patternToSegments, resolveHandlerImport, scanRoutes, sortRoutes } from '../src/index.js';
 
 vi.mock('node:fs', async () => {
   const { fs } = await import('memfs');
@@ -206,76 +202,43 @@ describe('patternToSegments', () => {
   });
 });
 
-describe('resolveHandlerTypesImport', () => {
-  const rootDir = '/my-app';
+describe('resolveHandlerImport', () => {
+  test('maps ./+types to virtual module', () => {
+    expect(resolveHandlerImport('./+types')).toBe('\0virtual:cloudflare-router/+types');
+  });
 
+  test('ignores other import specifiers', () => {
+    expect(resolveHandlerImport('./shared')).toBeUndefined();
+  });
+});
+
+describe('writeGeneratedTypes', () => {
   beforeEach(() => {
     vol.reset();
   });
 
-  test('maps dynamic params', () => {
-    const typesPath = path.join(
-      rootDir,
-      '.cloudflare-router',
-      'types',
-      'src',
-      'routes',
-      'api.test.[params]',
-      '+types',
-      'index.ts',
-    );
+  test('writes `.d.ts` files for routes and colocated modules', () => {
     vol.fromJSON({
-      [typesPath]: '',
+      '/app/src/routes/index.ts': '',
+      '/app/src/routes/test.[id]/index.ts': '',
+      '/app/src/routes/test.[id]/shared/index.ts': '',
+      '/app/src/routes/_shared/index.ts': '',
     });
 
-    const id = './+types';
-    const importer = path.join(rootDir, './src/routes/api.test.[params]/index.ts');
-    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
+    writeGeneratedTypes('/app', [
+      { filePath: '/app/src/routes/index.ts', pattern: '/' },
+      { filePath: '/app/src/routes/test.[id]/index.ts', pattern: '/test/[id]' },
+    ]);
 
-    expect(resolvedPath).toBe(typesPath);
-  });
+    const root = '/app/.cloudflare-router/types/src/routes/+types/index.d.ts';
+    const testRoot = '/app/.cloudflare-router/types/src/routes/test.[id]/+types/index.d.ts';
+    const testNested =
+      '/app/.cloudflare-router/types/src/routes/test.[id]/shared/+types/index.d.ts';
+    const sharedRoot = '/app/.cloudflare-router/types/src/routes/_shared/+types/index.d.ts';
 
-  test('maps catch-all params', () => {
-    const typesPath = path.join(
-      rootDir,
-      '.cloudflare-router',
-      'types',
-      'src',
-      'routes',
-      'api.test.[...catchall]',
-      '+types',
-      'index.ts',
-    );
-    vol.fromJSON({
-      [typesPath]: '',
-    });
-
-    const id = './+types';
-    const importer = path.join(rootDir, './src/routes/api.test.[...catchall]/index.ts');
-    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
-
-    expect(resolvedPath).toBe(typesPath);
-  });
-
-  test('maps static params', () => {
-    const typesPath = path.join(
-      rootDir,
-      '.cloudflare-router',
-      'types',
-      'src',
-      'routes',
-      'api',
-      '+types',
-      'index.ts',
-    );
-    vol.fromJSON({
-      [typesPath]: '',
-    });
-
-    const id = './+types';
-    const importer = path.join(rootDir, './src/routes/api/index.ts');
-    const resolvedPath = resolveHandlerTypesImport(rootDir, id, importer);
-
-    expect(resolvedPath).toBe(typesPath);
+    expect(vol.existsSync(root)).toBe(true);
+    expect(vol.existsSync(testRoot)).toBe(true);
+    expect(vol.existsSync(testNested)).toBe(true);
+    expect(vol.existsSync(sharedRoot)).toBe(false);
   });
 });

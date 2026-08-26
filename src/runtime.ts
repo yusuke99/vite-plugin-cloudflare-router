@@ -208,7 +208,7 @@ export interface HandlerBuilder<C = RouteContext, P = Params> {
  * });
  * ```
  */
-export function defineHandler(): HandlerBuilder {
+export function defineHandler<P = Params>(): HandlerBuilder<RouteContext<Cloudflare.Env, P>, P> {
   return handlerBuilder([]);
 }
 
@@ -310,7 +310,7 @@ export interface MiddlewareBuilder<P = Params, C = RouteContext<Cloudflare.Env, 
  *   .handle(({ requestId }) => json({ requestId }));
  * ```
  */
-export function defineMiddleware(): MiddlewareBuilder {
+export function defineMiddleware<P = Params>(): MiddlewareBuilder<P> {
   return {
     handle: (middleware) => middleware,
   };
@@ -318,13 +318,13 @@ export function defineMiddleware(): MiddlewareBuilder {
 
 /**
  * Call signature of `defineHandler` for each route.
- * Generated `./+types` casts `defineHandler` so `params` are inferred.
+ * Generated `./+types` declares `defineHandler` so `params` are inferred.
  *
  * @template {Params} P
  *
  * @example
  * ```ts
- * export const defineHandler = $defineHandler as DefineHandler<{ id: string }>;
+ * export const defineHandler: DefineHandler<{ id: string }>;
  * ```
  */
 export interface DefineHandler<P = Params> {
@@ -333,13 +333,13 @@ export interface DefineHandler<P = Params> {
 
 /**
  * Call signature of `defineMiddleware` for each route.
- * Generated `./+types` casts `defineMiddleware` so `params` are inferred.
+ * Generated `./+types` declares `defineMiddleware` so `params` are inferred.
  *
  * @template {Params} P
  *
  * @example
  * ```ts
- * export const defineMiddleware = $defineMiddleware as DefineMiddleware<{ id: string }>;
+ * export const defineMiddleware: DefineMiddleware<{ id: string }>;
  * ```
  */
 export interface DefineMiddleware<P = Params> {
@@ -439,6 +439,7 @@ function decodeSegment(segment: string) {
 }
 
 interface TypedResponse<T = unknown> extends Response {
+  json<U = T>(): Promise<U>;
   json(): Promise<T>;
 }
 
