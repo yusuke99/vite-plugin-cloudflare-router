@@ -1,11 +1,20 @@
+packages:
+  - 'playground/*'
+
+allowBuilds:
+  esbuild: true
+  workerd: true
+
 catalogs:
   dev:
+    '@cloudflare/vite-plugin': ^1.53.0
     '@rolldown/pluginutils': ^1.0.1
     '@types/node': ^24.0.0
     memfs: ^4.68.1
     typescript: ^7.0.2
     vite: npm:@voidzero-dev/vite-plus-core@0.2.6
     vite-plus: 0.2.6
+    wrangler: ^4.124.0
 
 overrides:
   vite: 'catalog:dev'
